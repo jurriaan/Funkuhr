@@ -30,17 +30,6 @@
 #define DCF_split_millis 150 // Number of milliseconds before we assume a logic 1
 #define DCF_sync_millis 1200 // No signal at second 59
 
-/**
- * Definitions for the timer interrupt 2 handler
- * The Arduino runs at 16 Mhz, we use a prescaler of 64 -> We need to
- * initialize the counter with 6. This way, we have 1000 interrupts per second.
- * We use tick_counter to count the interrupts.
- */
-#define INIT_TIMER_COUNT 6
-#define RESET_TIMER2 TCNT2 = INIT_TIMER_COUNT
-int tick_counter = 0;
-
-
 // DCF time format struct
 struct DCF77Buffer
 {
@@ -54,7 +43,7 @@ struct DCF77Buffer
   unsigned long long Day :6; // day
   unsigned long long Weekday :3; // day of week
   unsigned long long Month :5; // month
-  unsigned long long Year :8; // year (5 -&gt; 2005)
+  unsigned long long Year :8; // year (5 -> 2005)
   unsigned long long P3 :1; // parity
 };
 
@@ -82,7 +71,7 @@ sync_callback callback;
  */
 void calculateParity() {
   uint8_t parity = 0;
-  for(int pos = 21; pos &lt; 60; pos++)
+  for(int pos = 21; pos < 60; pos++)
   {
     // Update the parity bits. First: Reset when minute, hour or date starts.
     if (pos == 29 || pos == 36) parity = 0;
@@ -91,7 +80,7 @@ void calculateParity() {
     if (pos == 28) { flags.parity_min = parity; };
     if (pos == 35) { flags.parity_hour = parity; };
     if (pos == 58) { flags.parity_date = parity; };
-    parity = parity ^ ((dcf_rx_buffer&gt;&gt;pos) & 1);
+    parity = parity ^ ((dcf_rx_buffer>>pos) & 1);
   }
 }
 
@@ -101,25 +90,25 @@ void calculateParity() {
  */
 void finalizeBuffer(void)
 {
-  if (bufferPosition &gt; 44)
+  if (bufferPosition > 44)
   {
     struct DCF77Buffer *rx_buffer;
-    dcf_rx_buffer = dcf_rx_buffer &lt;&lt; (59 - bufferPosition);
+    dcf_rx_buffer = dcf_rx_buffer << (59 - bufferPosition);
     calculateParity();
     rx_buffer = (struct DCF77Buffer *)(unsigned long long)&dcf_rx_buffer;
     
-    if (flags.parity_min == rx_buffer-&gt;P1 &&
-    flags.parity_hour == rx_buffer-&gt;P2 &&
-    flags.parity_date == rx_buffer-&gt;P3)
+    if (flags.parity_min == rx_buffer->P1 &&
+    flags.parity_hour == rx_buffer->P2 &&
+    flags.parity_date == rx_buffer->P3)
     {
       Dcf77Time time;
       // Convert the received bits from BCD to decimal
-      time.min = rx_buffer-&gt;Min-((rx_buffer-&gt;Min/16)*6);
-      time.hour = rx_buffer-&gt;Hour-((rx_buffer-&gt;Hour/16)*6);
-      time.zone = rx_buffer-&gt;zoneoffset;
-      time.day = rx_buffer-&gt;Day-((rx_buffer-&gt;Day/16)*6);
-      time.month = rx_buffer-&gt;Month-((rx_buffer-&gt;Month/16)*6);
-      time.year = rx_buffer-&gt;Year-((rx_buffer-&gt;Year/16)*6);
+      time.min = rx_buffer->Min-((rx_buffer->Min/16)*6);
+      time.hour = rx_buffer->Hour-((rx_buffer->Hour/16)*6);
+      time.zone = rx_buffer->zoneoffset-((rx_buffer->Hour/16)*6);
+      time.day = rx_buffer->Day-((rx_buffer->Day/16)*6);
+      time.month = rx_buffer->Month-((rx_buffer->Month/16)*6);
+      time.year = rx_buffer->Year-((rx_buffer->Year/16)*6);
       if(time.month != 0 && time.year != 0) callback(time);
     }
   }
@@ -131,16 +120,16 @@ void finalizeBuffer(void)
 
 /**
  * Append a signal to the dcf_rx_buffer. Argument can be 1 or 0. An internal
- * counter shifts the writing position within the buffer. If position &gt; 59,
- * a new minute begins -&gt; time to call finalizeBuffer().
+ * counter shifts the writing position within the buffer. If position > 59,
+ * a new minute begins -> time to call finalizeBuffer().
  */
 void appendSignal(bool signal)
 {
-  dcf_rx_buffer = dcf_rx_buffer | ((unsigned long long) signal &lt;&lt; bufferPosition);
+  dcf_rx_buffer = dcf_rx_buffer | ((unsigned long long) signal << bufferPosition);
   
   bufferPosition++;
   
-  if (bufferPosition &gt; 59)
+  if (bufferPosition > 59)
   finalizeBuffer();
 }
 
@@ -152,26 +141,26 @@ void scanSignal(void)
   unsigned long thisFlankTime = millis();
   if (DCFSignalState == 1)
   {
-    if (thisFlankTime - previousFlankTime &gt; DCF_sync_millis)
+    if (thisFlankTime - previousFlankTime > DCF_sync_millis)
     {
       finalizeBuffer();
     }
     
-    else if (thisFlankTime - previousFlankTime &lt; 300)
+    else if (thisFlankTime - previousFlankTime < 300)
     {
       bufferPosition--;
       
-      if (bufferPosition &lt; 0)
+      if (bufferPosition < 0)
       bufferPosition = 0;
     }
     
-    if (thisFlankTime - previousFlankTime &gt; 300)
+    if (thisFlankTime - previousFlankTime > 300)
     previousFlankTime = thisFlankTime;
   }
   unsigned int diff = thisFlankTime - previousFlankTime;
-  if (diff &gt; DCF_min_millis && diff &lt; DCF_max_millis)
+  if (diff > DCF_min_millis && diff < DCF_max_millis)
   {
-    appendSignal(millis() - previousFlankTime &lt; DCF_split_millis);
+    appendSignal(millis() - previousFlankTime > DCF_split_millis);
   }
 }
 
@@ -181,7 +170,7 @@ void scanSignal(void)
 void int0handler()
 {
   // Inverted because the signal is fed through a transistor
-  DCFSignalState = !digitalRead(DCF77PIN);
+  DCFSignalState = digitalRead(DCF77PIN);
   if (DCFSignalState != previousSignalState) {
     scanSignal();
     digitalWrite(BLINKPIN, !!DCFSignalState);
